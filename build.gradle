@@ -1,0 +1,116 @@
+plugins {
+    id 'java'
+    id 'io.qameta.allure' version '2.11.0'
+    id 'org.openapi.generator' version '5.3.0'
+}
+
+group 'com.example'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = '11'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'junit:junit:4.13.1'
+    implementation 'org.jetbrains:annotations:23.0.0'
+
+    // TestNG for testing framework
+    testImplementation 'org.testng:testng:7.4.0'
+    // Allure for reporting
+    testImplementation 'io.qameta.allure:allure-testng:2.20.1'
+    testImplementation 'com.google.code.findbugs:jsr305:3.0.2'
+    // RestAssured for API testing
+    implementation 'io.rest-assured:rest-assured:4.4.0'
+    testImplementation 'org.hamcrest:hamcrest:2.2'
+    implementation 'com.google.code.gson:gson:2.8.8'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.0'
+    implementation 'io.swagger.core.v3:swagger-annotations:2.1.10'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.1'
+    implementation 'javax.validation:validation-api:2.0.1.Final'
+    implementation 'javax.annotation:javax.annotation-api:1.3.2'
+    implementation 'io.springfox:springfox-swagger2:2.9.2'
+    implementation 'io.swagger.core.v3:swagger-annotations:2.1.7'
+    implementation 'javax.annotation:javax.annotation-api:1.3.2'
+    implementation 'com.squareup.okhttp3:okhttp:4.9.3'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.9.3'
+    implementation 'org.threeten:threetenbp:1.5.1'
+    implementation 'io.gsonfire:gson-fire:1.0.1'
+    implementation 'javax.annotation:javax.annotation-api:1.3.2'
+    implementation 'org.apache.logging.log4j:log4j-slf4j-impl:2.17.0'
+    testImplementation 'io.rest-assured:rest-assured:4.4.0'
+    implementation 'io.rest-assured:rest-assured:4.4.0'
+    implementation 'org.apache.logging.log4j:log4j-api:2.14.1'
+    implementation 'org.apache.logging.log4j:log4j-core:2.14.1'
+    implementation 'org.assertj:assertj-core:3.21.0'
+}
+
+task processTestNGXml {
+    doLast {
+        def threadCount = project.hasProperty('thread.count') ? project.property('thread.count') as Integer : 3
+        def configFile = file('src/main/resources/config.properties')
+        def config = new Properties()
+        if (configFile.exists()) {
+            configFile.withInputStream {
+                config.load(it)
+            }
+        }
+        def xmlFile = file('src/test/resources/testng.xml')
+        def processedXmlFile = file("$buildDir/resources/testng-processed.xml")
+        def xmlContent = xmlFile.text
+        xmlContent = xmlContent.replace('${thread.count}', threadCount.toString())
+        processedXmlFile.text = xmlContent
+    }
+
+    inputs.file('src/test/resources/testng.xml')
+    outputs.file("$buildDir/resources/testng-processed.xml")
+}
+
+test {
+    useTestNG() {
+        suites 'src/test/resources/testng.xml'
+    }
+    ignoreFailures = true
+}
+
+test.dependsOn(processTestNGXml)
+
+allure {
+    version = '2.11.0'
+    autoconfigure = true
+    aspectjweaver = true
+}
+
+tasks.withType(Test) {
+    useTestNG()
+    outputs.upToDateWhen { false }
+    systemProperty "allure.results.directory", "$buildDir/allure-results"
+}
+
+tasks.named("allureReport") {
+    dependsOn test
+    doLast {
+        copy {
+            from "$buildDir/allure-results"
+            into "build/reports/allure-results"
+        }
+    }
+}
+
+tasks.named("allureServe") {
+    dependsOn test
+}
+
+openApiGenerate {
+    generatorName = 'java'
+    inputSpec = file('src/test/resources/openapi.yaml').toString()
+    outputDir = file("$buildDir/generated").toString()
+    validateSpec = true
+    configOptions = [
+            useJakartaEe: "true"  // Configuring Jakarta EE annotations
+    ]
+}
+
+sourceSets.main.java.srcDirs += "$buildDir/generated/src/main"
